@@ -20,3 +20,10 @@ def correct_text_chunk(chunk_text):
 
     return response.choices[0].message.content
 
+def correct_chunks(chunks):
+    corrected = []
+    for cid, text in chunks:
+        fixed = correct_text_chunk(text)
+        corrected.append((cid, fixed))
+    return corrected
+
