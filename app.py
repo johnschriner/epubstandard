@@ -1,7 +1,6 @@
 import os
-import tempfile
+from pathlib import Path
 from flask import Flask, request, render_template, send_file
-
 from utils.epub_utils import extract_epub_chunks, rebuild_epub_from_chunks
 from utils.ai_corrector import correct_chunks
 from difflib import HtmlDiff
@@ -26,7 +25,7 @@ def index():
         chunks = extract_epub_chunks(temp_path)
         corrected_chunks = correct_chunks(chunks)
 
-        # For now: flatten corrected chunks for diff preview
+        # Flatten text for preview
         original_text = "\n\n".join([text for _, text in chunks])
         corrected_text = "\n\n".join([text for _, text in corrected_chunks])
 
@@ -42,6 +41,12 @@ def index():
         output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'corrected_' + epub_file.filename)
         rebuild_epub_from_chunks(temp_path, corrected_chunks, output_path)
 
-        return render_template('result.html', diff=diff_html, download_path=output_path)
+        download_filename = Path(output_path).name
+
+        return render_template('result.html', diff=diff_html, download_filename=download_filename)
 
     return render_template('index.html')
+
+@app.route('/download/<filename>')
+def download(filename):
+    return send_file(os.path.join(app.config['CORRECTED_FOLDER'], filename), as_attachment=True)
