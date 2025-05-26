@@ -9,7 +9,7 @@ def correct_text_chunk(chunk_text):
         "Correct common OCR issues like joined or broken characters, incorrect spellings, and odd line breaks. "
         "The text may contain proper nouns, so try to preserve those, and standardize if different."
         "Return a cleaned version.\n\n"
-        f"{chunk_text[:4000]}"
+        f"{chunk_text[:2000]}"
     )
 
     response = client.chat.completions.create(
