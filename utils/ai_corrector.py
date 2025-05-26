@@ -3,12 +3,12 @@ import openai
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def correct_text(ocr_text):
+def correct_text_chunk(chunk_text):
     prompt = (
-        "This is a passage extracted from an OCR scan of an ebook. "
-        "Correct any obvious letter errors, misspellings, or bad line breaks while preserving paragraph structure. "
-        "Return the cleaned version of the text.\n\n"
-        f"{ocr_text[:5000]}"  # Truncate if too long
+        "This is a passage extracted from OCR. "
+        "Correct common OCR issues like joined or broken characters, incorrect spellings, and odd line breaks. "
+        "Return a cleaned version.\n\n"
+        f"{chunk_text[:4000]}"
     )
 
     response = openai.ChatCompletion.create(
@@ -18,3 +18,10 @@ def correct_text(ocr_text):
     )
 
     return response.choices[0].message['content']
+
+def correct_chunks(chunks):
+    corrected = []
+    for cid, text in chunks:
+        fixed = correct_text_chunk(text)
+        corrected.append((cid, fixed))
+    return corrected

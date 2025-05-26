@@ -2,23 +2,27 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 
-def extract_epub_text(epub_path):
+def extract_epub_chunks(epub_path):
     book = epub.read_epub(epub_path)
-    all_text = []
-    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+    chunks = []
+
+    for idx, item in enumerate(book.get_items_of_type(ebooklib.ITEM_DOCUMENT)):
         soup = BeautifulSoup(item.content, 'html.parser')
-        all_text.append(soup.get_text())
-    return all_text
+        text = soup.get_text()
+        chunks.append((item.get_id(), text))
 
-def rebuild_epub(original_path, corrected_text, output_path):
+    return chunks
+
+def rebuild_epub_from_chunks(original_path, corrected_chunks, output_path):
     book = epub.read_epub(original_path)
-    parts = corrected_text.split("\n\n")
+    corrected_map = {cid: ctext for cid, ctext in corrected_chunks}
 
-    for i, item in enumerate(book.get_items_of_type(ebooklib.ITEM_DOCUMENT)):
-        if i < len(parts):
+    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+        cid = item.get_id()
+        if cid in corrected_map:
             soup = BeautifulSoup(item.content, 'html.parser')
             soup.body.clear()
-            soup.body.append(parts[i])
+            soup.body.append(corrected_map[cid])
             item.content = str(soup).encode('utf-8')
 
     epub.write_epub(output_path, book)
