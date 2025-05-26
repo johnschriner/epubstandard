@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Local settings
+*.env
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Flask cache
+instance/
+*.db
+
+# Uploads & outputs
+uploads/
+corrected/
+
+# Render & deployment
+*.log
+*.pid
+render.yaml
+
+# Python egg
+*.egg-info/
+dist/
+build/
+
+# VSCode or IDE files
+.vscode/
+.idea/

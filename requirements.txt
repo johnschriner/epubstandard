@@ -1,0 +1,5 @@
+flask
+openai
+ebooklib
+beautifulsoup4
+difflib
