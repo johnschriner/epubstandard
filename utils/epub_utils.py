@@ -22,7 +22,15 @@ def rebuild_epub_from_chunks(original_path, corrected_chunks, output_path):
         if cid in corrected_map:
             soup = BeautifulSoup(item.content, 'html.parser')
             soup.body.clear()
-            soup.body.append(corrected_map[cid])
+
+            # Split corrected text into paragraphs and add each as a <p> tag
+            corrected_paragraphs = corrected_map[cid].split("\n\n")
+            for para in corrected_paragraphs:
+                if para.strip():
+                    p_tag = soup.new_tag("p")
+                    p_tag.string = para.strip()
+                    soup.body.append(p_tag)
+
             item.content = str(soup).encode('utf-8')
 
     epub.write_epub(output_path, book)
