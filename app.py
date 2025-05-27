@@ -84,7 +84,7 @@ def progress_stream():
                 message = progress_queue.get(timeout=5)
 
                 if message == 'DONE':
-                    yield f"data: REDIRECT:/download/{last_output_file}\n\n"
+                    yield f"data: REDIRECT:/review/{last_output_file}\n\n"
                     return
 
                 yield f"data: {message}\n\n"
@@ -94,6 +94,15 @@ def progress_stream():
                 yield ": keep-alive\n\n"
 
     return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
+
+@app.route('/review/<filename>')
+def review(filename):
+    path = os.path.join(app.config['CORRECTED_FOLDER'], filename)
+    chunks = extract_epub_chunks(path)
+    corrected_html = "\n\n".join(html for _, html in chunks)
+
+    return render_template('result.html', corrected_html=corrected_html, original_file=path)
+
 
 
 
