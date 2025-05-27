@@ -3,3 +3,4 @@ openai
 ebooklib
 beautifulsoup4
 gunicorn
+gevent
