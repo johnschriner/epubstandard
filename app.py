@@ -31,14 +31,21 @@ def index():
         # Combine corrected text for preview
         corrected_text = "\n\n".join([text for _, text in corrected_chunks])
 
-        return render_template(
-            'result.html',
-            corrected_text=corrected_text,
-            download_filename=download_filename
-        )
+        return render_template('result.html', diff=diff_html, corrected_text=corrected_text, original_file=temp_path)
 
     return render_template('index.html')
 
 @app.route('/download/<filename>')
 def download(filename):
     return send_file(os.path.join(app.config['CORRECTED_FOLDER'], filename), as_attachment=True)
+
+@app.route('/save', methods=['POST'])
+def save():
+    edited_text = request.form['edited_text']
+    original_file = request.form['original_file']
+    output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'final_' + os.path.basename(original_file))
+
+    from utils.epub_utils import rebuild_epub
+    rebuild_epub(original_file, edited_text, output_path)
+
+    return render_template('download.html', download_path=output_path)
