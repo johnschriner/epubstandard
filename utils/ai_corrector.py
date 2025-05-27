@@ -1,14 +1,13 @@
 import os
 from openai import OpenAI
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 def correct_text_chunk(chunk_text):
     """
     Sends a single chunk of text to GPT-4 for OCR cleanup.
-    Limits to 2000 characters per prompt to stay within token limits.
+    Re-initializes the OpenAI client to avoid threading errors on Render.
     """
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
     prompt = (
         "This is a passage extracted from OCR. "
         "Correct common OCR issues like joined or broken characters, incorrect spellings, and odd line breaks. "

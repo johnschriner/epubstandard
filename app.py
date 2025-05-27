@@ -38,10 +38,8 @@ def index():
             chunks = extract_epub_chunks(temp_path)
             total = len(chunks)
 
-            # Let ai_corrector handle corrections
             corrected = correct_chunks(chunks)
 
-            # Push progress messages
             for i in range(len(corrected)):
                 progress_queue.put(f"Processed chunk {i+1} of {total}")
 
@@ -51,13 +49,12 @@ def index():
             last_output_file = os.path.basename(output_path)
             progress_queue.put("DONE")
 
-        # Start the correction process in a separate thread
         threading.Thread(target=background_job).start()
 
         return render_template('processing.html')
 
-    # GET request returns upload form
     return render_template('index.html')
+
 
 
 
