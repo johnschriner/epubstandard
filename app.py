@@ -3,16 +3,27 @@ from pathlib import Path
 from flask import Flask, request, render_template, send_file
 from utils.epub_utils import extract_epub_chunks, rebuild_epub_from_chunks
 from utils.ai_corrector import correct_chunks
+import threading
+import time
+from flask import Response, stream_with_context
+from queue import Queue
+
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['CORRECTED_FOLDER'] = 'corrected'
+
+progress_queue = Queue()
+last_output_file = None  # Track output file for redirect
+
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['CORRECTED_FOLDER'], exist_ok=True)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    global last_output_file
+
     if request.method == 'POST':
         epub_file = request.files['file']
         if not epub_file.filename.endswith('.epub'):
@@ -21,19 +32,32 @@ def index():
         temp_path = os.path.join(app.config['UPLOAD_FOLDER'], epub_file.filename)
         epub_file.save(temp_path)
 
-        chunks = extract_epub_chunks(temp_path)
-        corrected_chunks = correct_chunks(chunks)
+        def background_job():
+            global last_output_file
 
-        output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'corrected_' + epub_file.filename)
-        rebuild_epub_from_chunks(temp_path, corrected_chunks, output_path)
-        download_filename = Path(output_path).name
+            chunks = extract_epub_chunks(temp_path)
+            total = len(chunks)
+            corrected = []
 
-        # Combine corrected text for preview
-        corrected_text = "\n\n".join([text for _, text in corrected_chunks])
+            for i, (cid, text) in enumerate(chunks):
+                try:
+                    fixed = correct_text_chunk(text)
+                    corrected.append((cid, fixed))
+                    progress_queue.put(f"Processed chunk {i+1} of {total}")
+                except Exception as e:
+                    corrected.append((cid, text))
+                    progress_queue.put(f"Error on chunk {i+1}: {str(e)}")
 
-        return render_template('result.html', diff=diff_html, corrected_text=corrected_text, original_file=temp_path)
+            output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'corrected_' + epub_file.filename)
+            rebuild_epub_from_chunks(temp_path, corrected, output_path)
 
-    return render_template('index.html')
+            last_output_file = os.path.basename(output_path)
+            progress_queue.put("DONE")
+
+        threading.Thread(target=background_job).start()
+        return render_template('processing.html')
+
+
 
 @app.route('/download/<filename>')
 def download(filename):
@@ -49,3 +73,18 @@ def save():
     rebuild_epub(original_file, edited_text, output_path)
 
     return render_template('download.html', download_path=output_path)
+
+progress_queue = Queue()
+
+@app.route('/progress-stream')
+def progress_stream():
+    def event_stream():
+        while True:
+            message = progress_queue.get()
+            if message == 'DONE':
+                yield f"data: REDIRECT:/download/{last_output_file}\n\n"
+                break
+            yield f"data: {message}\n\n"
+    return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
+
+

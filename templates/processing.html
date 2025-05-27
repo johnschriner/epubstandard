@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><title>Processing EPUB</title></head>
+<body>
+  <h1>Processing EPUB…</h1>
+  <pre id="log"></pre>
+
+  <script>
+    const log = document.getElementById('log');
+    const source = new EventSource("/progress-stream");
+
+    source.onmessage = function(event) {
+      if (event.data.startsWith("REDIRECT:")) {
+        const url = event.data.replace("REDIRECT:", "");
+        source.close();
+        window.location.href = url;
+      } else {
+        log.textContent += event.data + "\n";
+      }
+    };
+  </script>
+</body>
+</html>

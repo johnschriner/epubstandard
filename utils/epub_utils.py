@@ -2,41 +2,41 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 import ebooklib
 
-def extract_epub_text(epub_path):
+def extract_epub_chunks(epub_path):
     """
-    Extract full HTML blocks from all visible XHTML documents.
-    Returns a list of cleaned HTML strings (one per document).
+    Extracts XHTML chunks from the EPUB.
+    Returns a list of tuples: (item_id, cleaned HTML from <body>)
     """
     book = epub.read_epub(epub_path)
-    html_blocks = []
+    chunks = []
 
     for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
         soup = BeautifulSoup(item.content, 'html.parser')
 
-        # Remove non-visible elements
+        # Remove irrelevant sections
         for tag in soup(['nav', 'header', 'footer', 'script', 'style']):
             tag.decompose()
 
         body = soup.find('body')
-        if body and body.text.strip():
-            # Keep HTML content (not just .get_text())
-            cleaned_body = ''.join(str(x) for x in body.contents).strip()
-            html_blocks.append(cleaned_body)
+        if body and body.get_text(strip=True):
+            cleaned_html = ''.join(str(x) for x in body.contents).strip()
+            chunks.append((item.get_id(), cleaned_html))
 
-    return html_blocks
+    return chunks
 
 
-def rebuild_epub(original_path, corrected_blocks, output_path):
+def rebuild_epub_from_chunks(original_path, corrected_chunks, output_path):
     """
-    Rebuild EPUB by inserting corrected HTML blocks back into their respective sections.
-    `corrected_blocks` is a list of raw HTML fragments (one per section).
+    Rebuilds an EPUB from original, using corrected (id, html) content pairs.
+    Only modifies document items with matching IDs.
     """
     book = epub.read_epub(original_path)
-    doc_items = [item for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT)]
+    chunk_map = {id_: html for id_, html in corrected_chunks}
 
-    for i, item in enumerate(doc_items):
-        if i >= len(corrected_blocks):
-            break
+    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+        item_id = item.get_id()
+        if item_id not in chunk_map:
+            continue
 
         soup = BeautifulSoup(item.content, 'html.parser')
         body = soup.find('body')
@@ -44,8 +44,7 @@ def rebuild_epub(original_path, corrected_blocks, output_path):
             continue
 
         body.clear()
-        new_content = BeautifulSoup(corrected_blocks[i], 'html.parser')
-
+        new_content = BeautifulSoup(chunk_map[item_id], 'html.parser')
         for elem in new_content.contents:
             body.append(elem)
 
