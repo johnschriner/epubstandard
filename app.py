@@ -56,6 +56,7 @@ def index():
 
         threading.Thread(target=background_job).start()
         return render_template('processing.html')
+    return render_template('index.html')
 
 
 
