@@ -82,11 +82,21 @@ progress_queue = Queue()
 def progress_stream():
     def event_stream():
         while True:
-            message = progress_queue.get()
-            if message == 'DONE':
-                yield f"data: REDIRECT:/download/{last_output_file}\n\n"
-                break
-            yield f"data: {message}\n\n"
+            try:
+                # Wait up to 5 seconds for a new message
+                message = progress_queue.get(timeout=5)
+
+                if message == 'DONE':
+                    yield f"data: REDIRECT:/download/{last_output_file}\n\n"
+                    return
+
+                yield f"data: {message}\n\n"
+
+            except:
+                # If no message, send a keep-alive comment to prevent browser timeout
+                yield ": keep-alive\n\n"
+
     return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
+
 
 
