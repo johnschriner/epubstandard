@@ -55,4 +55,5 @@ def correct_chunks(chunks, max_length=2000):
 
         corrected.append((cid, corrected_text))
 
+    print(f"[INFO] Corrected {len(corrected)} chunks, approx {sum(len(t[1]) for t in corrected):,} characters")
     return corrected

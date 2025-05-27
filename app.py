@@ -101,7 +101,13 @@ def review(filename):
     chunks = extract_epub_chunks(path)
     corrected_html = "\n\n".join(html for _, html in chunks)
 
-    return render_template('result.html', corrected_html=corrected_html, original_file=path)
+    return render_template(
+        'result.html',
+        corrected_html=corrected_html,
+        original_file=path,
+        display_name=os.path.basename(filename)
+    )
+
 
 
 
