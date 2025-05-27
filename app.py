@@ -37,16 +37,13 @@ def index():
 
             chunks = extract_epub_chunks(temp_path)
             total = len(chunks)
-            corrected = []
 
-            for i, (cid, text) in enumerate(chunks):
-                try:
-                    fixed = correct_text_chunk(text)
-                    corrected.append((cid, fixed))
-                    progress_queue.put(f"Processed chunk {i+1} of {total}")
-                except Exception as e:
-                    corrected.append((cid, text))
-                    progress_queue.put(f"Error on chunk {i+1}: {str(e)}")
+            # Let ai_corrector handle corrections
+            corrected = correct_chunks(chunks)
+
+            # Push progress messages
+            for i in range(len(corrected)):
+                progress_queue.put(f"Processed chunk {i+1} of {total}")
 
             output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'corrected_' + epub_file.filename)
             rebuild_epub_from_chunks(temp_path, corrected, output_path)
@@ -54,8 +51,12 @@ def index():
             last_output_file = os.path.basename(output_path)
             progress_queue.put("DONE")
 
+        # Start the correction process in a separate thread
         threading.Thread(target=background_job).start()
+
         return render_template('processing.html')
+
+    # GET request returns upload form
     return render_template('index.html')
 
 
