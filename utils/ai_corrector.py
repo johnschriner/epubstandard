@@ -1,4 +1,5 @@
 import os
+import time
 from openai import OpenAI
 
 def correct_text_chunk(chunk_text):
@@ -23,10 +24,11 @@ def correct_text_chunk(chunk_text):
 
     return response.choices[0].message.content.strip()
 
+
 def correct_chunks(chunks, max_length=2000):
     """
     Takes a list of (id, html_text) chunks.
-    If a chunk is too long, splits it into subchunks of ~2000 characters.
+    Splits long chunks, retries failed subchunks up to 3 times.
     Returns a list of (id, corrected_html_text) chunks.
     """
     corrected = []
@@ -38,12 +40,20 @@ def correct_chunks(chunks, max_length=2000):
             fixed_parts = []
 
             for i, part in enumerate(subchunks):
-                try:
-                    fixed = correct_text_chunk(part)
-                    fixed_parts.append(fixed)
-                except Exception as e:
-                    print(f"[ERROR] Subchunk {i} of {cid}: {e}")
-                    fixed_parts.append(part)  # fallback to original
+                success = False
+                for attempt in range(3):  # Try up to 3 times
+                    try:
+                        fixed = correct_text_chunk(part)
+                        fixed_parts.append(fixed)
+                        success = True
+                        break
+                    except Exception as e:
+                        print(f"[ERROR] Subchunk {i} of {cid}, attempt {attempt+1}: {e}")
+                        time.sleep(1)  # brief delay before retry
+
+                if not success:
+                    print(f"[FALLBACK] Subchunk {i} of {cid} failed all retries — using original text.")
+                    fixed_parts.append(part)
 
             corrected_text = "\n".join(fixed_parts)
         else:

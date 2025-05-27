@@ -35,25 +35,38 @@ def index():
         def background_job():
             global last_output_file
 
+            # Step 1: extract chunks from the uploaded EPUB
             chunks = extract_epub_chunks(temp_path)
             total = len(chunks)
 
+            # Step 2: perform correction (with retry on long subchunks)
             corrected = correct_chunks(chunks)
 
+            # Step 3: send progress updates based on percent
             for i in range(len(corrected)):
-                progress_queue.put(f"Processed chunk {i+1} of {total}")
+                percent = int((i + 1) / total * 100)
+                progress_queue.put(f"{percent}% processed ({i+1} of {total})")
 
-            output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'corrected_' + epub_file.filename)
+            # Step 4: rebuild the corrected EPUB
+            output_path = os.path.join(
+                app.config['CORRECTED_FOLDER'],
+                'corrected_' + os.path.basename(epub_file.filename)
+            )
             rebuild_epub_from_chunks(temp_path, corrected, output_path)
-
             last_output_file = os.path.basename(output_path)
+
+            # Step 5: tell the client we're done and ready to review
             progress_queue.put("DONE")
 
+        # Kick off the background job
         threading.Thread(target=background_job).start()
 
+        # Show the progress interface
         return render_template('processing.html')
 
+    # GET request shows the upload form
     return render_template('index.html')
+
 
 
 
