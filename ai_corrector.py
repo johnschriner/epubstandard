@@ -3,6 +3,11 @@ import re
 import logging
 import time
 from dotenv import load_dotenv
+from datetime import datetime
+
+# Define timestamp for logging
+def timestamp():
+    return datetime.now().strftime("%H:%M:%S")
 
 load_dotenv()
 
