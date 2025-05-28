@@ -42,26 +42,28 @@ def chunk_html_sections(sections, max_tokens=2000):
     return chunks
 
 # --- Correction Driver ---
-def correct_chunks(chunks):
-    logging.info("🛠️ Starting chunk correction...")
+def correct_chunks(chunks, engine='ollama'):
+    print(f"[{timestamp()}] 🛠️ Starting chunk correction...")
     corrected = []
-    total_chars = 0
 
-    for chunk_id, html in chunks:
-        logging.info(f"🧩 Processing chunk {chunk_id}")
+    for i, (chunk_id, chunk_text) in enumerate(chunks):
+        print(f"[{timestamp()}] 🧩 Processing chunk {i + 1}/{len(chunks)} (id: {chunk_id})")
         try:
-            if ENGINE == "ollama":
-                corrected_html = correct_with_ollama(html)
+            if engine == 'ollama':
+                print(f"[{timestamp()}] Correcting with engine: ollama")
+                corrected_text = correct_with_ollama(chunk_text)
             else:
-                corrected_html = correct_with_openai(html)
-            corrected.append((chunk_id, corrected_html))
-            total_chars += len(html)
+                print(f"[{timestamp()}] Correcting with engine: openai")
+                corrected_text = correct_with_openai(chunk_text)
+            corrected.append((chunk_id, corrected_text))
         except Exception as e:
-            logging.error(f"[ERROR] Chunk {chunk_id} failed with {ENGINE}: {e}")
+            print(f"[{timestamp()}] [ERROR] Chunk {chunk_id} failed with {engine}: {e}")
+            corrected.append((chunk_id, chunk_text))  # fallback to original
 
-    logging.info("✅ Correction complete")
-    logging.info(f"📦 Total chunks: {len(corrected)}, total characters: {total_chars:,}")
+    print(f"[{timestamp()}] ✅ Correction complete")
+    print(f"[{timestamp()}] 📦 Total chunks: {len(corrected)}, total characters: {sum(len(c[1]) for c in corrected)}")
     return corrected
+
 
 # --- Ollama Correction ---
 def correct_with_ollama(chunk, model="mistral", base_url=None):
