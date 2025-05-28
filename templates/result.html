@@ -1,72 +1,72 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <title>Correction Result</title>
+  <meta charset="UTF-8">
+  <title>Corrected Result</title>
   <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
   <style>
-    table.diff { font-family: monospace; white-space: pre-wrap; }
-    #editor-container { height: 400px; background: white; margin-bottom: 1em; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2em;
+    }
+    .toolbar-container {
+      margin-bottom: 10px;
+    }
+    #editor-container {
+      height: 600px;
+      border: 1px solid #ccc;
+    }
+    .btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #3498db;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+    }
+    .btn:hover {
+      background-color: #2980b9;
+    }
   </style>
 </head>
 <body>
-  <h1>Corrected Text Diff</h1>
-  <div>{{ diff|safe }}</div>
+  <h1>Corrected Text: {{ display_name }}</h1>
 
-  <h2>Edit Corrected Text Below</h2>
-
-  <form method="post" action="/save">
-    <!-- Quill Toolbar -->
+  <div class="toolbar-container">
     <div id="toolbar">
-      <span class="ql-formats">
-        <select class="ql-header">
-          <option selected></option>
-          <option value="1"></option>
-          <option value="2"></option>
-        </select>
-        <button class="ql-bold"></button>
-        <button class="ql-italic"></button>
-        <button class="ql-underline"></button>
-      </span>
+      <button class="ql-bold"></button>
+      <button class="ql-italic"></button>
+      <button class="ql-underline"></button>
+      <button class="ql-link"></button>
+      <button class="ql-clean"></button>
     </div>
+  </div>
 
-    <!-- Quill Editor -->
-    <div id="editor-container"></div>
-  <script>
-    const correctedHTML = `{{ corrected_html|safe | replace("\n", "\\n") | replace("`", "\\`") }}`;
-  </script>
+  <div id="editor-container"></div>
 
-    <!-- Hidden form fields -->
+  <form action="/save" method="POST">
     <input type="hidden" name="edited_text" id="edited_text">
     <input type="hidden" name="original_file" value="{{ original_file }}">
-    <br>
-    <input type="submit" value="Save Changes & Download EPUB">
+    <button type="submit" class="btn">Save Changes</button>
   </form>
 
-  <!-- Quill JS -->
+  <a class="btn" href="{{ url_for('download', filename=display_name) }}">Download EPUB</a>
+  <a class="btn" href="{{ url_for('index') }}">Correct Another EPUB</a>
+
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
   <script>
+    const correctedHTML = `{{ corrected_html|safe | replace("\n", "\\n") | replace("`", "\\`") }}`;
+
     const quill = new Quill('#editor-container', {
       theme: 'snow',
       modules: { toolbar: '#toolbar' }
     });
 
-  // Load the full corrected HTML AFTER Quill is initialized
-  quill.root.innerHTML = correctedHTML;
-
-  // On submit, inject edited HTML
-  document.querySelector('form').addEventListener('submit', function(event) {
-    document.getElementById('edited_text').value = quill.root.innerHTML;
-  });
-</script>
-    const quill = new Quill('#editor-container', {
-      theme: 'snow',
-      modules: {
-        toolbar: '#toolbar'
-      }
-    });
+    quill.root.innerHTML = correctedHTML;
 
     document.querySelector('form').addEventListener('submit', function(event) {
-      const html = quill.root.innerHTML;
-      document.getElementById('edited_text').value = html;
+      document.getElementById('edited_text').value = quill.root.innerHTML;
     });
   </script>
 </body>
