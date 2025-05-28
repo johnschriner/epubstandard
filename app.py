@@ -1,83 +1,80 @@
-# app.py
 import os
-import uuid
-from flask import Flask, request, render_template, send_from_directory, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, session
 from werkzeug.utils import secure_filename
 from utils.epub_utils import extract_epub_chunks, rebuild_epub_from_chunks
 from ai_corrector import correct_chunks
-
-ON_RENDER = os.getenv("RENDER", "false").lower() == "true"
-DEFAULT_ENGINE = "openai" if ON_RENDER else "ollama"
-
-
-UPLOAD_FOLDER = 'uploads'
-CORRECTED_FOLDER = 'corrected'
-ALLOWED_EXTENSIONS = {'epub'}
+from uuid import uuid4
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['CORRECTED_FOLDER'] = CORRECTED_FOLDER
-
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", str(uuid4()))
+UPLOAD_FOLDER = "uploads"
+CORRECTED_FOLDER = "corrected"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(CORRECTED_FOLDER, exist_ok=True)
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        file = request.files.get('file')
-        engine = request.form.get('engine', 'ollama')
+    if request.method == "POST":
+        file = request.files["epub_file"]
+        engine = request.form.get("engine", "ollama")
+        if not file:
+            return "No file uploaded", 400
 
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
 
-            # Extract and correct
-            chunks = extract_epub_chunks(file_path)
-            corrected_chunks = correct_chunks(chunks, engine=engine)
+        # Extract and store chunks
+        chunks = extract_epub_chunks(file_path)
+        session["chunks"] = chunks  # store for review later
 
-            # Save corrected EPUB
-            corrected_filename = f"corrected_{filename}"
-            corrected_path = os.path.join(app.config['CORRECTED_FOLDER'], corrected_filename)
+        # Correct the chunks
+        corrected_chunks = correct_chunks(chunks, engine=engine)
+        if not corrected_chunks:
+            return render_template("error.html", message="Correction failed or returned no output. Check logs.")
+
+        # Save corrected epub
+        corrected_filename = f"corrected_{filename}"
+        corrected_path = os.path.join(CORRECTED_FOLDER, corrected_filename)
+
+        try:
             rebuild_epub_from_chunks(file_path, corrected_chunks, corrected_path)
+        except Exception as e:
+            return render_template("error.html", message=f"Error rebuilding EPUB: {e}")
 
-            return redirect(url_for('review', filename=corrected_filename))
+        return redirect(url_for("review", filename=corrected_filename))
 
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/review/<filename>')
+@app.route("/review/<filename>")
 def review(filename):
-    path = os.path.join(app.config['CORRECTED_FOLDER'], filename)
-    chunks = extract_epub_chunks(path)
-    corrected_html = "\n\n".join(html for _, html in chunks)
+    chunks = session.get("chunks", [])
+    if not chunks:
+        return render_template("error.html", message="No corrected chunks found in session.")
 
-    return render_template(
-        'result.html',
-        corrected_html=corrected_html,
-        original_file=path,
-        display_name=os.path.basename(filename)
-    )
+    try:
+        corrected_html = "\n\n".join(html for _, html in chunks)
+    except Exception as e:
+        return render_template("error.html", message=f"Error rendering HTML: {e}")
 
-@app.route('/download/<filename>')
-def download(filename):
-    return send_from_directory(app.config['CORRECTED_FOLDER'], filename, as_attachment=True)
+    return render_template("result.html", corrected_html=corrected_html, filename=filename)
 
-if __name__ == '__main__':
-    app.run(debug=True)
-
-@app.route('/save', methods=['POST'])
+@app.route("/save", methods=["POST"])
 def save():
-    edited_html = request.form.get('edited_text')
-    original_file_path = request.form.get('original_file')
-    filename = os.path.basename(original_file_path)
+    filename = request.form.get("filename")
+    updated_text = request.form.get("corrected_html")
+    if not filename or not updated_text:
+        return "Missing data", 400
 
-    output_path = os.path.join(app.config['CORRECTED_FOLDER'], filename)
+    output_path = os.path.join(CORRECTED_FOLDER, filename)
 
-    # Extract original chunks and replace content with edited text
-    from utils.epub_utils import rebuild_epub_from_html
-    rebuild_epub_from_html(edited_html, original_file_path, output_path)
+    try:
+        # TODO: Future implementation: re-embed corrected HTML back into EPUB
+        with open(output_path + ".txt", "w", encoding="utf-8") as f:
+            f.write(updated_text)
+        return "Saved successfully. EPUB output not yet regenerated."
+    except Exception as e:
+        return f"Save failed: {e}", 500
 
-    return redirect(url_for('download', filename=filename))
+if __name__ == "__main__":
+    app.run(debug=True)
