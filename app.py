@@ -6,6 +6,10 @@ from werkzeug.utils import secure_filename
 from utils.epub_utils import extract_epub_chunks, rebuild_epub_from_chunks
 from ai_corrector import correct_chunks
 
+ON_RENDER = os.getenv("RENDER", "false").lower() == "true"
+DEFAULT_ENGINE = "openai" if ON_RENDER else "ollama"
+
+
 UPLOAD_FOLDER = 'uploads'
 CORRECTED_FOLDER = 'corrected'
 ALLOWED_EXTENSIONS = {'epub'}

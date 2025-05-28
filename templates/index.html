@@ -12,9 +12,8 @@
 
     <label for="engine">Correction Engine:</label>
     <select name="engine">
-      <option value="ollama" selected>Local Ollama (default)</option>
-      <option value="gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</option>
-      <option value="gpt-4">OpenAI GPT-4</option>
+      <option value="ollama" {{ 'selected' if engine == 'ollama' else '' }}>LLaMA (local, default)</option>
+      <option value="openai" {{ 'selected' if engine == 'openai' else '' }}>OpenAI GPT</option>
     </select><br><br>
 
     <input type="submit" value="Upload and Correct">
