@@ -1,11 +1,23 @@
+<!-- templates/index.html -->
 <!doctype html>
 <html>
-<head><title>EPUB OCR Fixer</title></head>
+<head>
+  <title>EPUB AI Cleanup</title>
+</head>
 <body>
-  <h1>Upload EPUB for AI Cleanup</h1>
+  <h1>Upload EPUB for AI Correction</h1>
   <form method="post" enctype="multipart/form-data">
-    <input type="file" name="file" accept=".epub" required>
-    <input type="submit" value="Upload and Fix">
+    <label for="file">Choose an EPUB file:</label>
+    <input type="file" name="file" accept=".epub" required><br><br>
+
+    <label for="engine">Correction Engine:</label>
+    <select name="engine">
+      <option value="ollama" selected>Local Ollama (default)</option>
+      <option value="gpt-3.5-turbo">OpenAI GPT-3.5 Turbo</option>
+      <option value="gpt-4">OpenAI GPT-4</option>
+    </select><br><br>
+
+    <input type="submit" value="Upload and Correct">
   </form>
 </body>
 </html>

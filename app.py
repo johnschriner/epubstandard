@@ -1,115 +1,53 @@
+# app.py
 import os
-from pathlib import Path
-from flask import Flask, request, render_template, send_file
+import uuid
+import shutil
+from flask import Flask, request, render_template, send_from_directory, redirect, url_for
+from werkzeug.utils import secure_filename
 from utils.epub_utils import extract_epub_chunks, rebuild_epub_from_chunks
-from utils.ai_corrector import correct_chunks
-import threading
-import time
-from flask import Response, stream_with_context
-from queue import Queue
+from ai_corrector import correct_chunks
 
+UPLOAD_FOLDER = 'uploads'
+CORRECTED_FOLDER = 'corrected'
+ALLOWED_EXTENSIONS = {'epub'}
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['CORRECTED_FOLDER'] = 'corrected'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['CORRECTED_FOLDER'] = CORRECTED_FOLDER
 
-progress_queue = Queue()
-last_output_file = None  # Track output file for redirect
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(CORRECTED_FOLDER, exist_ok=True)
 
-
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['CORRECTED_FOLDER'], exist_ok=True)
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global last_output_file
-
     if request.method == 'POST':
-        epub_file = request.files['file']
-        if not epub_file.filename.endswith('.epub'):
-            return "Only EPUB files are supported", 400
+        file = request.files.get('file')
+        engine = request.form.get('engine', 'ollama')
 
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], epub_file.filename)
-        epub_file.save(temp_path)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
 
-        def background_job():
-            global last_output_file
+            # Extract and correct
+            chunks = extract_epub_chunks(file_path)
+            corrected_chunks = correct_chunks(chunks, engine=engine)
 
-            # Step 1: extract chunks from the uploaded EPUB
-            chunks = extract_epub_chunks(temp_path)
-            total = len(chunks)
+            # Save corrected EPUB
+            corrected_filename = f"corrected_{filename}"
+            corrected_path = os.path.join(app.config['CORRECTED_FOLDER'], corrected_filename)
+            rebuild_epub_from_chunks(corrected_chunks, corrected_path)
 
-            # Step 2: perform correction (with retry on long subchunks)
-            corrected = correct_chunks(chunks)
+            return redirect(url_for('review', filename=corrected_filename))
 
-            # Step 3: send progress updates based on percent
-            for i in range(len(corrected)):
-                percent = int((i + 1) / total * 100)
-                progress_queue.put(f"{percent}% processed ({i+1} of {total})")
-
-            # Step 4: rebuild the corrected EPUB
-            output_path = os.path.join(
-                app.config['CORRECTED_FOLDER'],
-                'corrected_' + os.path.basename(epub_file.filename)
-            )
-            rebuild_epub_from_chunks(temp_path, corrected, output_path)
-            last_output_file = os.path.basename(output_path)
-
-            # Step 5: tell the client we're done and ready to review
-            progress_queue.put("DONE")
-
-        # Kick off the background job
-        threading.Thread(target=background_job).start()
-
-        # Show the progress interface
-        return render_template('processing.html')
-
-    # GET request shows the upload form
     return render_template('index.html')
-
-
-
-
-
-@app.route('/download/<filename>')
-def download(filename):
-    return send_file(os.path.join(app.config['CORRECTED_FOLDER'], filename), as_attachment=True)
-
-@app.route('/save', methods=['POST'])
-def save():
-    edited_text = request.form['edited_text']
-    original_file = request.form['original_file']
-    output_path = os.path.join(app.config['CORRECTED_FOLDER'], 'final_' + os.path.basename(original_file))
-
-    from utils.epub_utils import rebuild_epub
-    rebuild_epub(original_file, edited_text, output_path)
-
-    return render_template('download.html', download_path=output_path)
-
-progress_queue = Queue()
-
-@app.route('/progress-stream')
-def progress_stream():
-    def event_stream():
-        while True:
-            try:
-                # Wait up to 5 seconds for a new message
-                message = progress_queue.get(timeout=5)
-
-                if message == 'DONE':
-                    yield f"data: REDIRECT:/review/{last_output_file}\n\n"
-                    return
-
-                yield f"data: {message}\n\n"
-
-            except:
-                # If no message, send a keep-alive comment to prevent browser timeout
-                yield ": keep-alive\n\n"
-
-    return Response(stream_with_context(event_stream()), mimetype='text/event-stream')
 
 @app.route('/review/<filename>')
 def review(filename):
+    from utils.epub_utils import extract_epub_chunks
     path = os.path.join(app.config['CORRECTED_FOLDER'], filename)
     chunks = extract_epub_chunks(path)
     corrected_html = "\n\n".join(html for _, html in chunks)
@@ -121,7 +59,9 @@ def review(filename):
         display_name=os.path.basename(filename)
     )
 
+@app.route('/download/<filename>')
+def download(filename):
+    return send_from_directory(app.config['CORRECTED_FOLDER'], filename, as_attachment=True)
 
-
-
-
+if __name__ == '__main__':
+    app.run(debug=True)
