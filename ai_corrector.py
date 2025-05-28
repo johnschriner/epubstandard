@@ -7,7 +7,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
+if not OLLAMA_BASE_URL:
+    raise RuntimeError("OLLAMA_BASE_URL is not set. Set it in your Render environment variables.")
+
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
