@@ -63,3 +63,17 @@ def download(filename):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+@app.route('/save', methods=['POST'])
+def save():
+    edited_html = request.form.get('edited_text')
+    original_file_path = request.form.get('original_file')
+    filename = os.path.basename(original_file_path)
+
+    output_path = os.path.join(app.config['CORRECTED_FOLDER'], filename)
+
+    # Extract original chunks and replace content with edited text
+    from utils.epub_utils import rebuild_epub_from_html
+    rebuild_epub_from_html(edited_html, original_file_path, output_path)
+
+    return redirect(url_for('download', filename=filename))

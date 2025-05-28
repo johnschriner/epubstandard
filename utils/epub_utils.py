@@ -51,3 +51,12 @@ def rebuild_epub_from_chunks(original_path, corrected_chunks, output_path):
         item.content = str(soup).encode('utf-8')
 
     epub.write_epub(output_path, book)
+
+def rebuild_epub_from_html(html_text, original_path, output_path):
+    book = epub.read_epub(original_path)
+    soup = BeautifulSoup(html_text, 'html.parser')
+    for item in book.get_items():
+        if item.get_type() == ebooklib.ITEM_DOCUMENT:
+            item.set_content(str(soup).encode('utf-8'))
+    epub.write_epub(output_path, book)
+

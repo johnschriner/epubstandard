@@ -1,57 +1,82 @@
-# ai_corrector.py
-import os
 import requests
+import openai
+import os
 from dotenv import load_dotenv
-from openai import OpenAI
 
 load_dotenv()
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def call_ollama(prompt):
-    try:
-        response = requests.post(
-            f"{OLLAMA_URL}/api/generate",
-            json={"model": "mistral", "prompt": prompt, "stream": False},
-            timeout=60
-        )
-        return response.json().get("response", "").strip()
-    except Exception as e:
-        print(f"[ERROR] Ollama failed: {e}")
-        raise RuntimeError("Ollama failed.")
+# Correct using OpenAI
 
-def call_openai(prompt, engine):
+def correct_with_openai(text):
     try:
-        response = openai_client.chat.completions.create(
-            model=engine,
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You correct OCR errors."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": "Correct grammar and fix OCR errors in the given text."},
+                {"role": "user", "content": text}
             ],
-            temperature=0.3
+            temperature=0.3,
+            max_tokens=2048
         )
-        return response.choices[0].message.content.strip()
+        return response['choices'][0]['message']['content'].strip()
     except Exception as e:
         print(f"[ERROR] OpenAI failed: {e}")
         raise RuntimeError("OpenAI failed.")
 
-def correct_text_chunk(text, engine="ollama"):
-    prompt = (
-        "Fix spelling errors, OCR mistakes, and formatting problems in the following text. "
-        "Preserve all structural elements such as paragraphs, italics, or titles.\n\n"
-        f"{text}"
-    )
-    return call_ollama(prompt) if engine == "ollama" else call_openai(prompt, engine)
+# Correct using Ollama
 
-def correct_chunks(chunks, engine="ollama"):
+def correct_with_ollama(text):
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3",
+                "prompt": f"Correct grammar and spelling:\n\n{text}",
+                "stream": False
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()["response"].strip()
+    except Exception as e:
+        print(f"[ERROR] Ollama failed: {e}")
+        raise RuntimeError("Ollama failed.")
+
+# Entry point for text chunk correction
+
+def correct_text_chunk(text, engine='ollama'):
+    if engine == 'ollama':
+        return correct_with_ollama(text)
+    elif engine == 'openai':
+        return correct_with_openai(text)
+    else:
+        raise ValueError(f"Unknown engine: {engine}")
+
+# Correct a list of (id, html) chunks
+
+def correct_chunks(chunks, engine='ollama', max_length=2000):
     corrected = []
     for cid, text in chunks:
-        try:
-            corrected_text = correct_text_chunk(text, engine=engine)
-        except Exception as e:
-            print(f"[ERROR] Chunk {cid} failed with {engine}: {e}")
-            corrected_text = text
+        if len(text) > max_length:
+            print(f"[WARN] Chunk {cid} is too long ({len(text)} chars), splitting…")
+            subchunks = [text[i:i+max_length] for i in range(0, len(text), max_length)]
+            fixed_parts = []
+            for i, part in enumerate(subchunks):
+                try:
+                    fixed = correct_text_chunk(part, engine)
+                    fixed_parts.append(fixed)
+                except Exception as e:
+                    print(f"[ERROR] Subchunk {i} of {cid}: {e}")
+                    fixed_parts.append(part)
+            corrected_text = "\n".join(fixed_parts)
+        else:
+            try:
+                corrected_text = correct_text_chunk(text, engine)
+            except Exception as e:
+                print(f"[ERROR] Failed to correct chunk {cid}: {e}")
+                corrected_text = text
         corrected.append((cid, corrected_text))
-    print(f"[INFO] Corrected {len(corrected)} chunks")
+    print(f"[INFO] Corrected {len(corrected)} chunks, approx {sum(len(t[1]) for t in corrected):,} characters")
     return corrected
