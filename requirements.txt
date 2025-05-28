@@ -6,3 +6,4 @@ gunicorn
 gevent
 requests
 flask-cors
+python-dotenv
