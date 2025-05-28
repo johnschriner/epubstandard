@@ -1,62 +1,53 @@
+import os
 from ebooklib import epub
 from bs4 import BeautifulSoup
-import ebooklib
+from tqdm import tqdm
 
-def extract_epub_chunks(epub_path):
-    """
-    Extracts XHTML chunks from the EPUB.
-    Returns a list of tuples: (item_id, cleaned HTML from <body>)
-    """
+
+def extract_html_chunks(epub_path, max_chunk_chars=6000):
     book = epub.read_epub(epub_path)
     chunks = []
+    chunk_id = 0
 
-    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-        soup = BeautifulSoup(item.content, 'html.parser')
-
-        # Remove irrelevant sections
-        for tag in soup(['nav', 'header', 'footer', 'script', 'style']):
-            tag.decompose()
-
-        body = soup.find('body')
-        if body and body.get_text(strip=True):
-            cleaned_html = ''.join(str(x) for x in body.contents).strip()
-            chunks.append((item.get_id(), cleaned_html))
+    for item in book.get_items():
+        if item.get_type() == epub.ITEM_DOCUMENT:
+            soup = BeautifulSoup(item.get_content(), "html.parser")
+            current_chunk = ""
+            for tag in soup.find_all(["p", "div", "span", "h1", "h2", "h3", "h4", "li"]):
+                text = tag.get_text(strip=True)
+                if not text:
+                    continue
+                if len(current_chunk) + len(text) > max_chunk_chars:
+                    if current_chunk:
+                        chunks.append((f"id{chunk_id}", current_chunk))
+                        chunk_id += 1
+                        current_chunk = ""
+                current_chunk += text + " "
+            if current_chunk:
+                chunks.append((f"id{chunk_id}", current_chunk))
+                chunk_id += 1
 
     return chunks
 
 
 def rebuild_epub_from_chunks(original_path, corrected_chunks, output_path):
-    """
-    Rebuilds an EPUB from original, using corrected (id, html) content pairs.
-    Only modifies document items with matching IDs.
-    """
     book = epub.read_epub(original_path)
-    chunk_map = {id_: html for id_, html in corrected_chunks}
+    chunk_map = {f"id{i}": html for i, html in enumerate(corrected_chunks)}
 
-    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
-        item_id = item.get_id()
-        if item_id not in chunk_map:
-            continue
-
-        soup = BeautifulSoup(item.content, 'html.parser')
-        body = soup.find('body')
-        if not body:
-            continue
-
-        body.clear()
-        new_content = BeautifulSoup(chunk_map[item_id], 'html.parser')
-        for elem in new_content.contents:
-            body.append(elem)
-
-        item.content = str(soup).encode('utf-8')
-
-    epub.write_epub(output_path, book)
-
-def rebuild_epub_from_html(html_text, original_path, output_path):
-    book = epub.read_epub(original_path)
-    soup = BeautifulSoup(html_text, 'html.parser')
     for item in book.get_items():
-        if item.get_type() == ebooklib.ITEM_DOCUMENT:
-            item.set_content(str(soup).encode('utf-8'))
+        if item.get_type() == epub.ITEM_DOCUMENT:
+            soup = BeautifulSoup(item.get_content(), "html.parser")
+            output_html = ""
+            for i, (chunk_id, chunk_text) in enumerate(chunk_map.items()):
+                output_html += f"<div>{chunk_text}</div>\n"
+            item.set_content(output_html.encode("utf-8"))
+
     epub.write_epub(output_path, book)
 
+
+def save_chunks_as_html(chunks, output_path):
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("<html><head><title>Corrected EPUB</title></head><body>\n")
+        for chunk in chunks:
+            f.write(f"<div class='editable' contenteditable='true'>{chunk}</div><hr>\n")
+        f.write("</body></html>")
