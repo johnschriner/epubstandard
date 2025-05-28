@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', date
 
 def get_engine_base_url(engine):
     if engine == "ollama":
-        return os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        return OLLAMA_BASE_URL
     elif engine == "openai":
         return "https://api.openai.com/v1"
     else:
@@ -26,9 +26,8 @@ def get_engine_base_url(engine):
 def correct_with_ollama(text):
     logging.info("Correcting with engine: ollama")
     try:
-        base_url = get_engine_base_url("ollama")
         response = requests.post(
-            f"{base_url}/api/generate",
+            f"{OLLAMA_BASE_URL}/api/generate",
             json={
                 "model": OLLAMA_MODEL,
                 "prompt": f"Fix the OCR and spelling errors in this legal text:\n\n{text}\n\nCorrected version:",
@@ -107,7 +106,7 @@ def correct_chunks(chunks, engine="ollama"):
                     logging.error(f"[ERROR] Subchunk {j + 1} of {chunk_id} failed: {corrected}")
                 corrected_subs.append(corrected)
                 time.sleep(0.3)
-            corrected_chunks.append(" ".join(corrected_subs))
+            corrected_chunks.append((chunk_id, " ".join(corrected_subs)))
         else:
             if engine == "ollama":
                 corrected = correct_with_ollama(chunk)
@@ -117,7 +116,7 @@ def correct_chunks(chunks, engine="ollama"):
                 corrected = f"Unknown engine: {engine}"
             if "failed" in corrected.lower():
                 logging.error(f"[ERROR] Chunk {chunk_id} failed with {engine}: {corrected}")
-            corrected_chunks.append(corrected)
+            corrected_chunks.append((chunk_id, corrected))
         time.sleep(0.5)
     logging.info(f"✅ Correction complete")
     logging.info(f"📦 Total chunks: {total_chunks}, total characters: {sum(len(c) for c in chunks)}")
