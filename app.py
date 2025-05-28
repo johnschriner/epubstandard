@@ -39,7 +39,7 @@ def index():
             # Save corrected EPUB
             corrected_filename = f"corrected_{filename}"
             corrected_path = os.path.join(app.config['CORRECTED_FOLDER'], corrected_filename)
-            rebuild_epub_from_chunks(corrected_chunks, corrected_path)
+            rebuild_epub_from_chunks(corrected_chunks, file_path, corrected_path)
 
             return redirect(url_for('review', filename=corrected_filename))
 
