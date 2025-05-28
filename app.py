@@ -1,7 +1,6 @@
 # app.py
 import os
 import uuid
-import shutil
 from flask import Flask, request, render_template, send_from_directory, redirect, url_for
 from werkzeug.utils import secure_filename
 from utils.epub_utils import extract_epub_chunks, rebuild_epub_from_chunks
@@ -39,7 +38,7 @@ def index():
             # Save corrected EPUB
             corrected_filename = f"corrected_{filename}"
             corrected_path = os.path.join(app.config['CORRECTED_FOLDER'], corrected_filename)
-            rebuild_epub_from_chunks(corrected_chunks, file_path, corrected_path)
+            rebuild_epub_from_chunks(file_path, corrected_chunks, corrected_path)
 
             return redirect(url_for('review', filename=corrected_filename))
 
@@ -47,7 +46,6 @@ def index():
 
 @app.route('/review/<filename>')
 def review(filename):
-    from utils.epub_utils import extract_epub_chunks
     path = os.path.join(app.config['CORRECTED_FOLDER'], filename)
     chunks = extract_epub_chunks(path)
     corrected_html = "\n\n".join(html for _, html in chunks)
