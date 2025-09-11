@@ -1,4 +1,4 @@
-# epubstandard v1.0
+# epubstandard v1.3
 
 A post-ABBYY EPUB cleanup tool.
 
