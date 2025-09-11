@@ -5,6 +5,7 @@ A post-ABBYY EPUB cleanup tool.
 ---
 
 ## Required
+**`get yourself a nice comfy venv`**  
 **`pip install lxml`**  
 
 **`--src PATH`**  
