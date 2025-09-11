@@ -5,6 +5,7 @@ A post-ABBYY EPUB cleanup tool.
 ---
 
 ## Required
+**`pip install lxml`**  
 
 **`--src PATH`**  
 The source directory where your `.epub` files live.  
