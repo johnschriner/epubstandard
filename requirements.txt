@@ -1,9 +1,0 @@
-flask
-openai
-ebooklib
-beautifulsoup4
-gunicorn
-gevent
-requests
-flask-cors
-python-dotenv
