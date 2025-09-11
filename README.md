@@ -1,1 +1,1 @@
-# epubcleanup
+# epubstandard v1.0
