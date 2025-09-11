@@ -1,5 +1,6 @@
 # epubstandard v1.0
 
+get yourself a nice comfy venv<p>
 pip install lxml<br />
 python epubstandard.py --src "/path/to/epubs" --dest "/path/to/out"<p>
 options:<br />
