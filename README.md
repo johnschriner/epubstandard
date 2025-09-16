@@ -1,12 +1,20 @@
-# epubstandard v1.3
+# epubstandard v1.3.5
 
-A post-ABBYY EPUB cleanup tool.
+A post-ABBYY EPUB cleanup and accessibility tool.
 
 ---
 
 ## Required
 **`get yourself a nice comfy venv`**  
-**`pip install lxml`**  
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install lxml
+```
+
+---
+
+## Input
 
 **`--src PATH`**  
 The source directory where your `.epub` files live.  
@@ -62,11 +70,19 @@ Any short line (≤160 chars) matching a pattern is stripped.
 
 ---
 
-## Misc
+## Fixes Applied
 
-**`--audit`**  
-Reserved flag. Right now it just enables some extra diff output in future extensions.  
-Safe to ignore unless you want verbose diagnostics.
+- Strip soft hyphens (U+00AD).  
+- Rejoin words split across linebreaks / hyphens (with a whitelist of real compounds).  
+- Merge **illegitimate paragraph breaks** (when ABBYY split mid-sentence).  
+- Collapse redundant empty `<p>` elements.  
+- Normalize cover page and manifest metadata.  
+- Normalize navigation and ensure `<meta charset="utf-8">` is present.  
+- Add bidirectional note links (in-text ref ↔ footnote block).  
+- Ensure note blocks carry `role="doc-footnote"` for accessibility.  
+- Optional removal of repeating journal banners.  
+- Optional blacklist-based removal of boilerplate lines.  
+- Mark EPUBs with `cleanup:processed-by` metadata for idempotence.
 
 ---
 
@@ -81,7 +97,8 @@ Safe to ignore unless you want verbose diagnostics.
   - soft hyphens removed  
   - empty paragraphs collapsed  
   - blacklist removals  
-  - banners removed  
+  - banners removed / kept  
+  - **illegitimate paragraphs merged**  
 
 ---
 
@@ -100,3 +117,11 @@ python epubstandard.py --src input/ --dest output/ --dry-run
 # With a blacklist of patterns
 python epubstandard.py --src input/ --dest output/ --blacklist cleanup_blacklist.txt
 ```
+
+---
+
+## Notes
+
+- Each run produces a fresh CSV report for auditing.  
+- EPUBs are re-packed with strict XML/XHTML where required, HTML elsewhere for safety.  
+- Accessibility enhancements are ongoing — see TODOs in the source for planned features (e.g., alt-text generation for images).
