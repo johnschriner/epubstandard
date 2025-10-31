@@ -1,127 +1,75 @@
-# epubstandard v1.3.5
+# EPUB Quality Assurance & Enhancement Pipeline
 
-A post-ABBYY EPUB cleanup and accessibility tool.
+This project is a collection of Python scripts designed to upgrade, clean, validate, and enhance EPUB files, transforming them from basic exports into high-quality, accessible, and repository-ready digital documents.
 
----
+The pipeline is built to be run on a directory of EPUB files, automating a complex series of improvements and fixes.
 
-## Required
-**`get yourself a nice comfy venv`**  
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install lxml
-```
+## Key Features
 
----
+This pipeline automatically processes EPUBs to:
 
-## Input
+* **Upgrade to EPUB 3**: Converts legacy EPUB 2 files to the modern EPUB 3.2 standard.
+* **Resolve Validation Errors**: Systematically fixes common `epubcheck` errors, including:
+    * Ensuring a valid, non-empty `<title>` tag in all XHTML files.
+    * Creating a single, compliant `dcterms:modified` timestamp.
+    * Fixing unique identifier-related metadata.
+* **Generate Table of Contents**: Automatically builds a complete and valid `nav.xhtml` file, including a nested Table of Contents (ToC) and accessibility Landmarks (e.g., "Start of Content").
+* **Enhance Footnotes**: Scans the text and creates a fully accessible, bidirectional footnote system.
+    * Adds `epub:type="noteref"` to footnote links.
+    * Adds `epub:type="footnote"` to the footnote content.
+    * Inserts `↩` backlinks to return the reader to their original spot.
+* **Add Semantic Structure**: Enriches the document for accessibility by identifying key sections (like title pages, copyright pages, and chapters) and wrapping them in semantic tags (e.g., `<section epub:type="chapter">`).
+* **Clean Content**: Removes specified "banner" text (like "Scanned by...") and blacklisted HTML tags/attributes, all configurable via `config.yaml`.
 
-**`--src PATH`**  
-The source directory where your `.epub` files live.  
-The script will scan this folder (and subfolders) for EPUBs to process.
+## File Structure
 
----
+* `epubstandard_all.py`: **(Main Script)** The primary entry point. Runs the full pipeline on a directory.
+* `epub3_upgrade.py`: Handles the EPUB 2-to-3 upgrade, fixes OPF metadata, and generates the `nav.xhtml`.
+* `epubstandard.py`: The core content enhancement module. Cleans XHTML, processes footnotes, and adds semantic structure.
+* `epubfix.py`: A "healer" script that uses `epubcheck` to validate, apply fixes, and re-validate.
+* `utils.py`: Shared utility functions (zipping, unzipping, finding OPF, running `epubcheck`).
+* `config.yaml`: External configuration file for customizing banners and blacklisted tags.
+* `csvtoconsole.py`: A utility to print a human-readable summary of the CSV report.
+* `logs/`: Directory where detailed processing logs are stored.
 
-## Output / Destination
+## Requirements
 
-**`--dest PATH`** *(default: `out`)*  
-Where to put the cleaned EPUBs. Ignored if you use `--inplace`.
+* Python 3.6+
+* Python libraries: `lxml`, `pyyaml`, `pandas`
+* **EpubCheck**: A working installation of `epubcheck` is required. The script will try to find it on your system `PATH`.
+    * If it's not found, you must set the `EPUBCHECK` environment variable to point to the `epubcheck.jar` file.
 
-**`--inplace`**  
-Instead of writing cleaned copies to `--dest`, overwrite the originals inside `--src`.
+### Installation
 
----
+1.  **Install Python Dependencies:**
+    ```bash
+    pip install lxml pyyaml pandas
+    ```
 
-## Processing Behavior
+2.  **Install EpubCheck:**
+    * On Debian/Ubuntu: `sudo apt install epubcheck`
+    * Or, [download the .jar file](https://github.com/w3c/epubcheck/releases) and set the environment variable:
+        ```bash
+        export EPUBCHECK="/path/to/your/epubcheck.jar"
+        ```
 
-**`--force`**  
-Run again even if the EPUB already has a `cleanup:processed-by` marker with the same config.  
-(Normally the tool skips files that were already processed with the same settings.)
+## How to Run the Pipeline
 
-**`--dry-run`**  
-Simulate all changes but don’t actually write any EPUBs.  
-Useful for checking the report before touching files.
+1.  **Configure**: Edit `config.yaml` to add any banners or blacklisted tags you want to remove.
+2.  **Place EPUBs**: Add your source EPUB files to the `input/` directory.
+3.  **Run the Script**: From your terminal, run the main script. Make sure to set the `EPUBCHECK` variable if needed.
 
----
+    ```bash
+    EPUBCHECK="/usr/bin/epubcheck" python epubstandard_all.py --input input/ --output output/
+    ```
 
-## Banner (journal header/footer) cleanup
+4.  **Review Results**:
+    * The processed, enhanced EPUBs will be in the `output/` directory.
+    * A detailed `epubstandard_report.csv` file will be created in `output/`.
+    * Detailed logs are saved in the `logs/` directory.
 
-**`--no-banners`**  
-Turn off banner detection/removal entirely.
-
-**`--banner-min-repeat FLOAT`** *(default: 0.6)*  
-Minimum fraction of documents where a banner must repeat to be removed.  
-Example: `0.6` = if the snippet appears in ≥60% of spine files, it’s considered boilerplate.
-
-**`--banner-top-chars INT`** *(default: 150)*  
-How many characters from the top of each spine file to check for a repeating banner.
-
-**`--banner-bottom-chars INT`** *(default: 150)*  
-Same, but for the bottom of each spine file.
-
----
-
-## Blacklist
-
-**`--blacklist FILE`**  
-Path to a text file of regex patterns (one per line).  
-Any short line (≤160 chars) matching a pattern is stripped.  
-(e.g. `^This article is published under …`)
-
----
-
-## Fixes Applied
-
-- Strip soft hyphens (U+00AD).  
-- Rejoin words split across linebreaks / hyphens (with a whitelist of real compounds).  
-- Merge **illegitimate paragraph breaks** (when ABBYY split mid-sentence).  
-- Collapse redundant empty `<p>` elements.  
-- Normalize cover page and manifest metadata.  
-- Normalize navigation and ensure `<meta charset="utf-8">` is present.  
-- Add bidirectional note links (in-text ref ↔ footnote block).  
-- Ensure note blocks carry `role="doc-footnote"` for accessibility.  
-- Optional removal of repeating journal banners.  
-- Optional blacklist-based removal of boilerplate lines.  
-- Mark EPUBs with `cleanup:processed-by` metadata for idempotence.
-
----
-
-## Outputs
-
-- Cleaned EPUBs (in `--dest` or in place).  
-- A CSV report named `epubstandard_report_<timestamp>.csv` in the same folder as output, with counts of:
-  - linebreak fixes  
-  - forward links repaired  
-  - backlinks added  
-  - symbol/numeric note IDs created  
-  - soft hyphens removed  
-  - empty paragraphs collapsed  
-  - blacklist removals  
-  - banners removed / kept  
-  - **illegitimate paragraphs merged**  
-
----
-
-## Example usage
-
-```bash
-# Clean to a new output directory
-python epubstandard.py --src input/ --dest output/
-
-# Clean in place (overwrite originals)
-python epubstandard.py --src input/ --inplace
-
-# Dry run (no files written, just a report)
-python epubstandard.py --src input/ --dest output/ --dry-run
-
-# With a blacklist of patterns
-python epubstandard.py --src input/ --dest output/ --blacklist cleanup_blacklist.txt
-```
-
----
-
-## Notes
-
-- Each run produces a fresh CSV report for auditing.  
-- EPUBs are re-packed with strict XML/XHTML where required, HTML elsewhere for safety.  
-- Accessibility enhancements are ongoing — see TODOs in the source for planned features (e.g., alt-text generation for images).
+5.  **View Summary**: For a quick summary, `cd` into the output directory and run the `csvtoconsole.py` script (you'll need to use the full path to the script).
+    ```bash
+    cd output/
+    python ../csvtoconsole.py
+    ```
