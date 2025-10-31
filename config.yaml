@@ -1,0 +1,36 @@
+# Configuration for EPUB Standardization Scripts
+
+# Banners to be removed.
+# Each item is a dictionary with 'parent_tag' and 'text_contains'.
+# The script will remove any 'parent_tag' that contains the specified text.
+banners:
+  - parent_tag: 'div'
+    text_contains: 'This book was produced by'
+  - parent_tag: 'p'
+    text_contains: 'Scanned by...'
+
+# Blacklisted elements and attributes to be removed.
+# This helps clean up proprietary or non-standard markup.
+blacklist:
+  # Tags to remove entirely (including their content)
+  tags:
+    - 'script'
+    - 'style'
+    - 'link'
+    - 'meta'
+
+  # Attributes to remove from any element
+  attributes:
+    - 'style'
+    - 'onclick'
+    - 'onload'
+    - 'class' # Example: remove all class attributes
+
+  # Specific attributes on specific tags
+  attributes_on_tags:
+    p: ['align']
+    div: ['align']
+
+# If true, the script will stop immediately if an error occurs on any single EPUB.
+# If false, it will log the error and continue to the next file.
+fail_fast: false
