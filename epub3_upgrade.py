@@ -86,7 +86,7 @@ def build_nav_and_landmarks(opf_tree: etree._ElementTree, opf_path: Path):
             except Exception as e:
                 logging.warning(f"Could not parse {href} for ToC: {e}")
 
-    # --- FINAL FIX: If no headings were found, create a default entry to prevent an empty ToC ---
+    # If no headings were found, create a default entry to prevent an empty ToC
     if not toc_entries and start_of_content_href:
         toc_entries.append({'href': start_of_content_href, 'text': 'Start of Content'})
 
@@ -97,8 +97,8 @@ def build_nav_and_landmarks(opf_tree: etree._ElementTree, opf_path: Path):
     
     toc_nav = etree.SubElement(body, 'nav', attrib={f"{{{NS['epub']}}}type": "toc"})
     etree.SubElement(toc_nav, 'h1').text = "Table of Contents"
-    toc_ol = etree.SubElement(toc_nav, 'ol')
-    for entry in toc_entries:
+    toc_ol = etree.SubElement(toc_nav, 'ol') # Always create the list
+    for entry in toc_entries: # Populate if there are entries
         li = etree.SubElement(toc_ol, 'li')
         a = etree.SubElement(li, 'a', href=entry['href'])
         a.text = entry['text']
@@ -137,9 +137,14 @@ def run_upgrade(epub_path: Path, output_path: Path):
         # Aggressive Cleanup
         items_to_remove = manifest.xpath('.//opf:item[contains(@href, ".ncx") or contains(@href, "nav.xhtml") or contains(@href, "navigation.xhtml")]', namespaces=NS)
         for item in items_to_remove:
-            file_to_delete = opf_dir / item.get('href')
-            if file_to_delete.exists(): file_to_delete.unlink()
+            file_to_delete = (opf_dir / item.get('href')).resolve()
+            if file_to_delete.exists():
+                try:
+                    file_to_delete.unlink()
+                except OSError as e:
+                    logging.warning(f"Could not delete old nav file {file_to_delete}: {e}")
             item.getparent().remove(item)
+            
         for item in manifest.xpath('.//opf:item[@properties]', namespaces=NS):
             if 'nav' in (item.get('properties') or ''):
                 new_props = item.get('properties').replace('nav', '').strip()

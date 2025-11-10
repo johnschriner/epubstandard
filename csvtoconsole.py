@@ -49,6 +49,13 @@ def main():
         print(f"  - Total errors before: {int(total_errors_before)}")
         print(f"  - Total errors after:  {int(total_errors_after)}")
         print(f"  - Net change in errors: {int(total_errors_after - total_errors_before)}")
+    
+    # Print metrics from the new healer script
+    if 'broken_links_removed' in df.columns:
+        total_broken_links = df['broken_links_removed'].sum()
+        if total_broken_links > 0:
+            print("\n🔧 Healer Script Metrics:")
+            print(f"  - Total broken internal links removed: {int(total_broken_links)}")
 
 if __name__ == "__main__":
     main()
