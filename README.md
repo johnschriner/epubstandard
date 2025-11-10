@@ -13,24 +13,27 @@ This pipeline automatically processes EPUBs to:
     * Ensuring a valid, non-empty `<title>` tag in all XHTML files.
     * Creating a single, compliant `dcterms:modified` timestamp.
     * Fixing unique identifier-related metadata.
+    * **Healing Broken Links**: Automatically detects and removes broken internal fragment links (e.g., `<a href="#fn1">` with no matching `id="fn1"`) to resolve `RSC-012` errors.
 * **Generate Table of Contents**: Automatically builds a complete and valid `nav.xhtml` file, including a nested Table of Contents (ToC) and accessibility Landmarks (e.g., "Start of Content").
 * **Enhance Footnotes**: Scans the text and creates a fully accessible, bidirectional footnote system.
     * Adds `epub:type="noteref"` to footnote links.
     * Adds `epub:type="footnote"` to the footnote content.
     * Inserts `↩` backlinks to return the reader to their original spot.
-* **Add Semantic Structure**: Enriches the document for accessibility by identifying key sections (like title pages, copyright pages, and chapters) and wrapping them in semantic tags (e.g., `<section epub:type="chapter">`).
+* **Add Semantic Structure**: Enriches the document for accessibility by identifying key sections (like title pages, copyright pages, and chapters) and adding semantic attributes.
 * **Clean Content**: Removes specified "banner" text (like "Scanned by...") and blacklisted HTML tags/attributes, all configurable via `config.yaml`.
 
 ## File Structure
 
-* `epubstandard_all.py`: **(Main Script)** The primary entry point. Runs the full pipeline on a directory.
+* `epubstandard_all.py`: **(Main Script)** The primary entry point. Runs the full pipeline on a directory and prints a final summary tally.
 * `epub3_upgrade.py`: Handles the EPUB 2-to-3 upgrade, fixes OPF metadata, and generates the `nav.xhtml`.
-* `epubstandard.py`: The core content enhancement module. Cleans XHTML, processes footnotes, and adds semantic structure.
+* `epubstandard.py`: The core content enhancement module. Uses a "smart" two-pass system:
+    1.  **Heal Pass**: Uses an HTML parser to fix broken fragment links in all files.
+    2.  **Enhance Pass**: Uses a strict XML parser to apply semantics and cleanup to the (now valid) files.
 * `epubfix.py`: A "healer" script that uses `epubcheck` to validate, apply fixes, and re-validate.
 * `utils.py`: Shared utility functions (zipping, unzipping, finding OPF, running `epubcheck`).
 * `config.yaml`: External configuration file for customizing banners and blacklisted tags.
 * `csvtoconsole.py`: A utility to print a human-readable summary of the CSV report.
-* `logs/`: Directory where detailed processing logs are stored.
+* `output/logs/`: Directory where detailed processing logs are stored.
 
 ## Requirements
 
@@ -64,12 +67,12 @@ This pipeline automatically processes EPUBs to:
     ```
 
 4.  **Review Results**:
+    * A final summary tally will be printed directly to your console (e.g., `✅ Succeeded: 16 ❌ Failed: 0`).
     * The processed, enhanced EPUBs will be in the `output/` directory.
     * A detailed `epubstandard_report.csv` file will be created in `output/`.
-    * Detailed logs are saved in the `logs/` directory.
+    * Detailed logs are saved in the `output/logs/` directory.
 
-5.  **View Summary**: For a quick summary, `cd` into the output directory and run the `csvtoconsole.py` script (you'll need to use the full path to the script).
+5.  **View CSV Summary**: For a more detailed console summary of the CSV report, you can run:
     ```bash
-    cd output/
-    python ../csvtoconsole.py
+    python csvtoconsole.py
     ```
