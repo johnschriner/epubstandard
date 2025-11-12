@@ -22,6 +22,8 @@ This pipeline automatically processes EPUBs to:
 * **Add Semantic Structure**: Enriches the document for accessibility by identifying key sections (like title pages, copyright pages, and chapters) and adding semantic attributes.
 * **Clean Content**: Removes specified "banner" text (like "Scanned by...") and blacklisted HTML tags/attributes, all configurable via `config.yaml`.
 
+---
+
 ## File Structure
 
 * `epubstandard_all.py`: **(Main Script)** The primary entry point. Runs the full pipeline on a directory and prints a final summary tally.
@@ -30,10 +32,13 @@ This pipeline automatically processes EPUBs to:
     1.  **Heal Pass**: Uses an HTML parser to fix broken fragment links in all files.
     2.  **Enhance Pass**: Uses a strict XML parser to apply semantics and cleanup to the (now valid) files.
 * `epubfix.py`: A "healer" script that uses `epubcheck` to validate, apply fixes, and re-validate.
+* `epubstandard-supplemental.py`: **(Repair Tool)** A post-process surgical script for fixing rare, severe errors in files that fail the main pipeline.
 * `utils.py`: Shared utility functions (zipping, unzipping, finding OPF, running `epubcheck`).
 * `config.yaml`: External configuration file for customizing banners and blacklisted tags.
 * `csvtoconsole.py`: A utility to print a human-readable summary of the CSV report.
 * `output/logs/`: Directory where detailed processing logs are stored.
+
+---
 
 ## Requirements
 
@@ -56,6 +61,8 @@ This pipeline automatically processes EPUBs to:
         export EPUBCHECK="/path/to/your/epubcheck.jar"
         ```
 
+---
+
 ## How to Run the Pipeline
 
 1.  **Configure**: Edit `config.yaml` to add any banners or blacklisted tags you want to remove.
@@ -72,7 +79,23 @@ This pipeline automatically processes EPUBs to:
     * A detailed `epubstandard_report.csv` file will be created in `output/`.
     * Detailed logs are saved in the `output/logs/` directory.
 
-5.  **View CSV Summary**: For a more detailed console summary of the CSV report, you can run:
-    ```bash
-    python csvtoconsole.py
-    ```
+---
+
+## `epubstandard-supplemental.py`
+
+This is a **post-process repair script** used to fix rare files that failed validation after the main batch run.
+
+**Why is it separate?**
+To avoid risking the stable, 99.8% successful main script. It's a targeted tool for surgical fixes, not for batch processing.
+
+**What it fixes:**
+
+* **`RSC-005` (Nested `<a>` tags):** "De-links" inner `<a>` tags (converts them to `<span>`) to fix structural errors.
+* **`RD` (Broken links):** Re-runs the broken link-fixing logic after the file's structure is repaired.
+* **`FATAL(RSC-016)` (Invalid `<br>` tags):** Fixes an output error by saving the file as XHTML-compliant XML (using `method='xml'`), which ensures self-closing tags like `<br/>`.
+
+**How to Use:**
+Run it *only* on the specific files that failed `epubcheck`.
+
+```bash
+python epubstandard-supplemental.py /path/to/_TO_FIX-File1.epub
