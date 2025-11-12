@@ -1,4 +1,4 @@
-# epubstandard.py (Final version with "smart" two-pass parser logic)
+# epubstandard.py (Final version + XML broken link fix)
 import logging
 import re
 from typing import Dict, List
@@ -11,49 +11,9 @@ from utils import XHTML_NS, OPF_NS, DC_NS
 # Define namespaces for XPath queries
 XML_NS = {'xhtml': XHTML_NS, 'epub': 'http://www.idpf.org/2007/ops'}
 
-def remove_broken_fragment_links_html(doc: etree._ElementTree) -> int:
-    """
-    Finds all internal links (e.g., <a href="#fn1">) and checks if the
-    target ID (e.g., id="fn1") exists in the document.
-    If not, "unwraps" the link, leaving only its text.
-    """
+# --- XML-SAFE FUNCTIONS (for "good" files) ---
+def remove_banners_xml(doc: etree._ElementTree, config: dict) -> int:
     count = 0
-    links = doc.xpath('//a[starts-with(@href, "#")]') 
-    all_ids = set(doc.xpath('//@id'))
-    
-    for link in links:
-        href = link.get('href', '')
-        fragment = href.lstrip('#')
-        
-        if fragment and fragment not in all_ids:
-            try:
-                parent = link.getparent()
-                if parent is None: continue
-
-                text = (link.text or '')
-                tail = (link.tail or '')
-
-                prev = link.getprevious()
-                if prev is not None:
-                    prev.tail = (prev.tail or '') + text + tail
-                else:
-                    parent.text = (parent.text or '') + text + tail
-                
-                parent.remove(link)
-                count += 1
-            except Exception as e:
-                logging.warning(f"Failed to remove broken link {href}: {e}")
-    return count
-
-def run_cleanup_and_semantics(doc: etree._ElementTree, config: dict, book_title: str) -> (int, int, int):
-    """
-    Runs all our "clean" XML-based enhancements.
-    """
-    banners_removed = 0
-    blacklist_removed = 0
-    semantics_added = 0
-    
-    # --- Banners ---
     banners = config.get('banners', [])
     for banner_config in banners:
         parent_tag = banner_config.get('parent_tag', 'div')
@@ -63,51 +23,168 @@ def run_cleanup_and_semantics(doc: etree._ElementTree, config: dict, book_title:
         for elem in doc.xpath(xpath, namespaces=XML_NS):
             if elem.getparent() is not None:
                 elem.getparent().remove(elem)
-                banners_removed += 1
-                
-    # --- Blacklist ---
+                count += 1
+    return count
+
+def cleanup_markup_xml(doc: etree._ElementTree, config: dict) -> int:
+    count = 0
     blacklist = config.get('blacklist', {})
     for tag in blacklist.get('tags', []):
         for elem in doc.xpath(f"//xhtml:{tag}", namespaces=XML_NS):
             if elem.getparent() is not None: elem.getparent().remove(elem)
-            blacklist_removed += 1
+            count += 1
     for attr in blacklist.get('attributes', []):
         for elem in doc.xpath(f"//*[@{attr}]"):
             del elem.attrib[attr]
-            blacklist_removed += 1
+            count += 1
     for tag, attrs in blacklist.get('attributes_on_tags', {}).items():
         for attr in attrs:
             for elem in doc.xpath(f"//xhtml:{tag}[@{attr}]", namespaces=XML_NS):
                 del elem.attrib[attr]
-                blacklist_removed += 1
+                count += 1
+    return count
 
-    # --- Semantics ---
+def add_semantic_structure_xml(doc: etree._ElementTree, book_title: str) -> int:
     body = doc.find('.//xhtml:body', namespaces=XML_NS)
-    if body is not None:
-        if book_title:
-            headings = body.xpath('.//xhtml:h1 | .//xhtml:h2', namespaces=XML_NS)
-            for h in headings:
-                if h.text and book_title in h.text:
-                    if 'titlepage' not in (body.get(f"{{{XML_NS['epub']}}}type") or ''):
-                        body.set(f"{{{XML_NS['epub']}}}type", 'bodymatter titlepage')
-                        semantics_added += 1
-                        break
-        copyright_paras = body.xpath('.//xhtml:p[contains(., "Copyright")]', namespaces=XML_NS)
-        for p in copyright_paras:
-             if not p.xpath('ancestor::xhtml:section[@epub:type="copyright-page"]', namespaces=XML_NS):
-                section = etree.Element(f"{{{XML_NS['xhtml']}}}section", attrib={f"{{{XML_NS['epub']}}}type": "copyright-page"})
-                p.addprevious(section)
-                section.append(p)
-                semantics_added += 1
-        chapter_headings = body.xpath('.//xhtml:h1 | .//xhtml:h2', namespaces=XML_NS)
-        for h in chapter_headings:
-            if h.text and re.match(r'^\s*chapter\s+\d+', h.text, re.IGNORECASE):
-                if h.get(f"{{{XML_NS['epub']}}}type") != 'chapter':
-                    h.set(f"{{{XML_NS['epub']}}}type", 'chapter')
-                    semantics_added += 1
-                    
-    return banners_removed, blacklist_removed, semantics_added
+    if body is None: return 0
+    change_count = 0
+    if book_title:
+        headings = body.xpath('.//xhtml:h1 | .//xhtml:h2', namespaces=XML_NS)
+        for h in headings:
+            if h.text and book_title in h.text:
+                if 'titlepage' not in (body.get(f"{{{XML_NS['epub']}}}type") or ''):
+                    body.set(f"{{{XML_NS['epub']}}}type", 'bodymatter titlepage')
+                    change_count += 1
+                    break
+    copyright_paras = body.xpath('.//xhtml:p[contains(., "Copyright")]', namespaces=XML_NS)
+    for p in copyright_paras:
+         if not p.xpath('ancestor::xhtml:section[@epub:type="copyright-page"]', namespaces=XML_NS):
+            section = etree.Element(f"{{{XML_NS['xhtml']}}}section", attrib={f"{{{XML_NS['epub']}}}type": "copyright-page"})
+            p.addprevious(section)
+            section.append(p)
+            change_count += 1
+    chapter_headings = body.xpath('.//xhtml:h1 | .//xhtml:h2', namespaces=XML_NS)
+    for h in chapter_headings:
+        if h.text and re.match(r'^\s*chapter\s+\d+', h.text, re.IGNORECASE):
+            if h.get(f"{{{XML_NS['epub']}}}type") != 'chapter':
+                h.set(f"{{{XML_NS['epub']}}}type", 'chapter')
+                change_count += 1
+    return change_count
 
+def remove_broken_fragment_links_xml(doc: etree._ElementTree) -> int:
+    count = 0
+    # Use namespaced XPath for the 'a' tag
+    links = doc.xpath('//xhtml:a[starts-with(@href, "#")]', namespaces=XML_NS) 
+    # Getting all IDs is namespace-agnostic
+    all_ids = set(doc.xpath('//@id'))
+    
+    for link in links:
+        href = link.get('href', '')
+        fragment = href.lstrip('#')
+        if fragment and fragment not in all_ids:
+            try:
+                parent = link.getparent()
+                if parent is None: continue
+                text = (link.text or '')
+                tail = (link.tail or '')
+                prev = link.getprevious()
+                
+                if prev is not None:
+                    prev.tail = (prev.tail or '') + text + tail
+                else:
+                    parent.text = (parent.text or '') + text + tail
+                    
+                parent.remove(link)
+                count += 1
+            except Exception as e:
+                logging.warning(f"Failed to remove broken XML link {href}: {e}")
+    return count
+
+# --- HTML-SAFE FUNCTIONS (for "broken" files) ---
+def remove_banners_html(doc: etree._ElementTree, config: dict) -> int:
+    count = 0
+    banners = config.get('banners', [])
+    for banner_config in banners:
+        parent_tag = banner_config.get('parent_tag', 'div').lower()
+        text = banner_config.get('text_contains', '')
+        if not text: continue
+        xpath = f"//body//{parent_tag}[contains(., '{text}')]"
+        for elem in doc.xpath(xpath):
+            if elem.getparent() is not None:
+                elem.getparent().remove(elem)
+                count += 1
+    return count
+
+def cleanup_markup_html(doc: etree._ElementTree, config: dict) -> int:
+    count = 0
+    blacklist = config.get('blacklist', {})
+    for tag in blacklist.get('tags', []):
+        for elem in doc.xpath(f"//body//{tag.lower()}"):
+            if elem.getparent() is not None: elem.getparent().remove(elem)
+            count += 1
+    for attr in blacklist.get('attributes', []):
+        for elem in doc.xpath(f"//*[@{attr}]"):
+            del elem.attrib[attr]
+            count += 1
+    for tag, attrs in blacklist.get('attributes_on_tags', {}).items():
+        for attr in attrs:
+            for elem in doc.xpath(f"//body//{tag.lower()}[@{attr}]"):
+                del elem.attrib[attr]
+                count += 1
+    return count
+
+def remove_broken_fragment_links_html(doc: etree._ElementTree) -> int:
+    count = 0
+    links = doc.xpath('//a[starts-with(@href, "#")]') 
+    all_ids = set(doc.xpath('//@id'))
+    for link in links:
+        href = link.get('href', '')
+        fragment = href.lstrip('#')
+        if fragment and fragment not in all_ids:
+            try:
+                parent = link.getparent()
+                if parent is None: continue
+                text = (link.text or '')
+                tail = (link.tail or '')
+                prev = link.getprevious()
+                if prev is not None:
+                    prev.tail = (prev.tail or '') + text + tail
+                else:
+                    parent.text = (parent.text or '') + text + tail
+                parent.remove(link)
+                count += 1
+            except Exception as e:
+                logging.warning(f"Failed to remove broken link {href}: {e}")
+    return count
+
+def add_semantic_structure_html(doc: etree._ElementTree, book_title: str) -> int:
+    body = doc.find('.//body')
+    if body is None: return 0
+    change_count = 0
+    if book_title:
+        headings = body.xpath('.//h1 | .//h2')
+        for h in headings:
+            if h.text and book_title in h.text:
+                if 'titlepage' not in (body.get(f"{{{XML_NS['epub']}}}type") or ''):
+                    body.set(f"{{{XML_NS['epub']}}}type", 'bodymatter titlepage')
+                    change_count += 1
+                    break
+    copyright_paras = body.xpath('.//p[contains(., "Copyright")]')
+    for p in copyright_paras:
+         if not p.xpath('ancestor::section[@epub:type="copyright-page"]'):
+            section = etree.Element('section', attrib={f"{{{XML_NS['epub']}}}type": "copyright-page"})
+            p.addprevious(section)
+            section.append(p)
+            change_count += 1
+    chapter_headings = body.xpath('.//h1 | .//h2')
+    for h in chapter_headings:
+        if h.text and re.match(r'^\s*chapter\s+\d+', h.text, re.IGNORECASE):
+            if h.get(f"{{{XML_NS['epub']}}}type") != 'chapter':
+                h.set(f"{{{XML_NS['epub']}}}type", 'chapter')
+                change_count += 1
+    return change_count
+
+# --- Footnote processor (runs last, always as HTML) ---
 def process_footnotes(xhtml_docs: List[Path]) -> Dict[str, int]:
     metrics = {"footnotes_processed": 0, "backlinks_added": 0}
     note_call_map = {}
@@ -162,6 +239,7 @@ def process_footnotes(xhtml_docs: List[Path]) -> Dict[str, int]:
             logging.warning(f"Footnote Pass 2 (Injection) failed on {doc_path.name}: {e}")
     return metrics
 
+# --- Main "Smart" Processing Function ---
 def process_epub(unzip_dir: Path, opf_tree: etree._ElementTree, opf_path: Path, config: dict) -> Dict[str, int]:
     total_metrics = {
         "banners_removed": 0, "blacklist_removed": 0, "footnotes_processed": 0,
@@ -175,60 +253,80 @@ def process_epub(unzip_dir: Path, opf_tree: etree._ElementTree, opf_path: Path, 
 
     manifest_items = opf_tree.xpath("//opf:item[@media-type='application/xhtml+xml']", namespaces={'opf': OPF_NS})
     
-    parser_xml = etree.XMLParser(recover=False) # Strict
-    parser_html = etree.HTMLParser(recover=True) # Forgiving
+    parser_xml = etree.XMLParser(recover=False)
+    parser_html = etree.HTMLParser(recover=True)
 
-    xhtml_docs_to_process = []
+    xhtml_docs_to_process_clean = []
+    
     for item in manifest_items:
         href = item.get('href')
-        if not href: continue
+        if not href or href == "nav.xhtml": continue
             
         xhtml_file_path = (opf_path.parent / href).resolve()
         if not xhtml_file_path.is_file(): continue
-            
-        xhtml_docs_to_process.append(xhtml_file_path)
         
-        # --- PASS 1: HEALER (HTML PARSER) ---
-        # Always run the broken link healer on every file using the HTML parser
-        # This fixes files like Guggenheim without breaking clean ones.
-        broken_links = 0
+        # We will try to process as XML first.
         try:
-            doc_html = etree.parse(str(xhtml_file_path), parser_html)
-            broken_links = remove_broken_fragment_links_html(doc_html)
-            if broken_links > 0:
-                total_metrics["broken_links_removed"] += broken_links
-                doc_html.write(str(xhtml_file_path), encoding='utf-8', method='html', doctype="<!DOCTYPE html>")
-        except Exception as e:
-            logging.error(f"Error during HTML healing of {xhtml_file_path.name}: {e}")
-            continue # Skip this file if healing fails catastrophically
-
-        # --- PASS 2: ENHANCER (XML PARSER) ---
-        # Now, try to run all the "clean" XML-based enhancements.
-        # This will work on the 15 good files and the newly-healed Guggenheim file.
-        changes = 0
-        try:
+            # --- PASS 1: CLEAN XML PATH ---
             doc_xml = etree.parse(str(xhtml_file_path), parser_xml)
             
-            b, bl, s = run_cleanup_and_semantics(doc_xml, config, book_title)
+            # --- Call all XML-safe functions ---
+            b = remove_banners_xml(doc_xml, config)
+            bl = cleanup_markup_xml(doc_xml, config)
+            s = add_semantic_structure_xml(doc_xml, book_title)
+            br = remove_broken_fragment_links_xml(doc_xml) # <-- ADDED THIS CALL
+            # ---------------------------------------------------
+            
             total_metrics["banners_removed"] += b
             total_metrics["blacklist_removed"] += bl
             total_metrics["semantics_added"] += s
-            changes = b + bl + s
+            total_metrics["broken_links_removed"] += br # <-- ADDED THIS METRIC
+            changes = b + bl + s + br # <-- ADDED 'br' TO CHANGES
 
             if changes > 0:
                 doc_xml.write(str(xhtml_file_path), encoding='utf-8', method='xml', xml_declaration=True, doctype="<!DOCTYPE html>")
-                
+            
+            xhtml_docs_to_process_clean.append(xhtml_file_path) # Mark as clean
+            
         except etree.XMLSyntaxError:
-            # This should now only happen if a file is *truly* malformed XML
-            # (which shouldn't be the case after our epub3_upgrade.py fixes)
-            logging.warning(f"File {xhtml_file_path.name} is not valid XML. Skipping XML enhancements.")
-        except Exception as e:
-            logging.error(f"Error during XML enhancement of {xhtml_file_path.name}: {e}")
+            # --- PASS 1: FAILED - SWITCH TO HEALER (HTML) PATH ---
+            logging.warning(f"File {xhtml_file_path.name} is not valid XML. Switching to HTML 'healer' mode.")
+            try:
+                doc_html = etree.parse(str(xhtml_file_path), parser_html)
+                
+                # --- Run ALL HTML-safe functions ---
+                changes = 0
+                broken_links = remove_broken_fragment_links_html(doc_html)
+                total_metrics["broken_links_removed"] += broken_links
+                changes += broken_links
+                
+                banners = remove_banners_html(doc_html, config)
+                total_metrics["banners_removed"] += banners
+                changes += banners
+                
+                cleanup = cleanup_markup_html(doc_html, config)
+                total_metrics["blacklist_removed"] += cleanup
+                changes += cleanup
+                
+                semantics = add_semantic_structure_html(doc_html, book_title)
+                total_metrics["semantics_added"] += semantics
+                changes += semantics
+                # ------------------------------------------------
 
-    # --- PASS 3: FOOTNOTES (HTML PARSER) ---
-    # Footnotes are messy. We always run this last, using the HTML parser.
-    if xhtml_docs_to_process:
-        footnote_metrics = process_footnotes(xhtml_docs_to_process)
+                # Always re-save as HTML to fix <br>/<img> tags
+                doc_html.write(str(xhtml_file_path), encoding='utf-8', method='html', doctype="<!DOCTYPE html>")
+                
+                # After healing, it *should* be clean enough for footnotes
+                xhtml_docs_to_process_clean.append(xhtml_file_path)
+
+            except Exception as e:
+                logging.error(f"Error during HTML cleanup of {xhtml_file_path.name}: {e}")
+                # This file is truly broken, do not add to footnote list
+
+    # --- PASS 2: FOOTNOTES (HTML PARSER) ---
+    # ONLY run footnotes on the files that were not quarantined.
+    if xhtml_docs_to_process_clean:
+        footnote_metrics = process_footnotes(xhtml_docs_to_process_clean)
         total_metrics.update(footnote_metrics)
 
     return total_metrics
